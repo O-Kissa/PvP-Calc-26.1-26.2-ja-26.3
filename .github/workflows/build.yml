@@ -1,0 +1,66 @@
+name: Build PvPCalc
+on:
+  push:
+  workflow_dispatch:
+jobs:
+  main:
+    name: Minecraft 1.21.11
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack the project zip
+        run: |
+          for z in PvPCalc-*.zip; do unzip -qo "$z" -d _src; done
+          test -f _src/PvPCalc/build.gradle
+          test -f _src/PvPCalc/src/main/resources/fabric.mod.json
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.2.1
+      - name: Build
+        working-directory: _src/PvPCalc
+        run: gradle build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pvpcalc-jar-1.21.11
+          path: |
+            _src/PvPCalc/build/libs/*.jar
+            !_src/PvPCalc/build/libs/*-sources.jar
+
+  port26:
+    name: Minecraft ${{ matrix.mc }} (experimental)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        mc: ["26.1.2", "26.2", "26.3"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Unpack the project zip
+        run: for z in PvPCalc-*.zip; do unzip -qo "$z" -d _src; done
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: 9.2.1
+      - name: Convert the sources to Mojang names
+        working-directory: _src/PvPCalc
+        run: gradle migrateMappings --mappings "net.minecraft:mappings:1.21.11"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+      - name: Port and build for ${{ matrix.mc }}
+        run: python3 _src/PvPCalc/tools/ci/port26.py --mc "${{ matrix.mc }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pvpcalc-jar-mc${{ matrix.mc }}
+          path: |
+            _src/PvPCalc/build/libs/*.jar
+            !_src/PvPCalc/build/libs/*-sources.jar
